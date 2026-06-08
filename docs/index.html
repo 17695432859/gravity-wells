@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Gravity Wells</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', system-ui, sans-serif; }
+  canvas { display: block; }
+
+  /* ─── Landing Screen ─── */
+  #landing {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, #0a0a2e 0%, #000005 100%);
+  }
+  #landing h1 {
+    font-size: clamp(2rem, 8vw, 5rem); font-weight: 900;
+    background: linear-gradient(135deg, #00f0ff, #a855f7, #ff00aa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text; text-fill-color: transparent;
+    letter-spacing: -2px; margin-bottom: 0.5rem;
+    text-shadow: 0 0 60px rgba(0,240,255,0.3);
+    animation: titlePulse 3s ease-in-out infinite;
+  }
+  @keyframes titlePulse {
+    0%,100% { filter: brightness(1); }
+    50% { filter: brightness(1.3); }
+  }
+  #landing .subtitle {
+    color: #667; font-size: clamp(0.8rem, 2.5vw, 1.1rem); margin-bottom: 2rem;
+    letter-spacing: 4px; text-transform: uppercase;
+  }
+  #landing input {
+    width: min(320px, 80vw); padding: 14px 20px; font-size: 1.1rem;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px; color: #fff; outline: none; text-align: center;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  #landing input:focus {
+    border-color: #00f0ff;
+    box-shadow: 0 0 20px rgba(0,240,255,0.2);
+  }
+  #landing input::placeholder { color: #556; }
+  .btn-row { display: flex; gap: 12px; margin-top: 1rem; flex-wrap: wrap; justify-content: center; }
+  #landing button {
+    padding: 14px 36px; font-size: 1.05rem; font-weight: 700;
+    border: none; border-radius: 12px; color: #000; cursor: pointer;
+    letter-spacing: 1px; text-transform: uppercase;
+    transition: transform 0.15s, box-shadow 0.3s;
+  }
+  #landing button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(0,240,255,0.4);
+  }
+  #play-btn {
+    background: linear-gradient(135deg, #00f0ff, #a855f7);
+  }
+  #solo-btn {
+    background: linear-gradient(135deg, #ff6600, #ffee00);
+  }
+  #landing .controls-hint {
+    margin-top: 2.5rem; color: #445; font-size: 0.85rem; text-align: center; line-height: 1.8;
+  }
+  #landing .controls-hint kbd {
+    background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.12); font-family: inherit;
+  }
+  .connecting { color: #ff0 !important; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0.3; } }
+  #landing .version { position: absolute; bottom: 1rem; color: #334; font-size: 0.75rem; }
+
+  /* ─── Mode tag ─── */
+  .mode-tag {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 55;
+    background: rgba(0,0,0,0.5); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
+    padding: 4px 14px; font-size: 0.7rem; color: #667; letter-spacing: 1px;
+    text-transform: uppercase; display: none;
+  }
+  .mode-tag.active { display: block; }
+
+  /* ─── HUD ─── */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    display: none; pointer-events: none; padding: 16px;
+  }
+  #hud.active { display: flex; justify-content: space-between; align-items: flex-start; }
+  .hud-left, .hud-right { pointer-events: auto; }
+  .leaderboard {
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+    padding: 12px 16px; min-width: 180px;
+  }
+  .leaderboard h3 {
+    color: #889; font-size: 0.7rem; letter-spacing: 2px;
+    text-transform: uppercase; margin-bottom: 8px;
+  }
+  .leaderboard .entry {
+    display: flex; align-items: center; gap: 8px; padding: 3px 0;
+    font-size: 0.85rem;
+  }
+  .leaderboard .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .leaderboard .name { color: #ccc; flex: 1; }
+  .leaderboard .score { color: #889; font-variant-numeric: tabular-nums; }
+  .leaderboard .you { color: #0ff; font-weight: 600; }
+  .status-bar { display: flex; gap: 8px; align-items: center; }
+  .status-pill {
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
+    padding: 6px 14px; font-size: 0.8rem; color: #aab;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .boost-indicator {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #0f0; box-shadow: 0 0 6px #0f0;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .boost-indicator.cooldown { background: #444; box-shadow: none; }
+  .powerup-badge {
+    padding: 3px 10px; border-radius: 10px; font-size: 0.75rem;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  }
+  #death-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+    flex-direction: column; gap: 1rem;
+  }
+  #death-overlay.active { display: flex; }
+  #death-overlay h2 { color: #f33; font-size: 2rem; }
+  #death-overlay p { color: #889; font-size: 1rem; }
+  #death-overlay .timer { color: #ff0; font-size: 1.5rem; font-weight: 700; }
+  #mobile-controls {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 55; display: none; gap: 20px; align-items: center;
+  }
+  #mobile-controls.active { display: flex; }
+  .joystick-area {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1);
+    position: relative; touch-action: none;
+  }
+  .joystick-knob {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(0,240,255,0.3); border: 2px solid rgba(0,240,255,0.5);
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .boost-btn {
+    width: 70px; height: 70px; border-radius: 50%;
+    background: rgba(168,85,247,0.2); border: 2px solid rgba(168,85,247,0.4);
+    color: #a855f7; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: manipulation;
+  }
+  .boost-btn:active { background: rgba(168,85,247,0.5); }
+</style>
+</head>
+<body>
+  <div id="landing">
+    <h1>GRAVITY WELLS</h1>
+    <p class="subtitle">Collect · Grow · Dominate</p>
+    <input id="name-input" type="text" placeholder="Enter your name" maxlength="12" autocomplete="off">
+    <div class="btn-row">
+      <button id="solo-btn">🎮 Solo (vs Bots)</button>
+      <button id="play-btn">🌐 Multiplayer</button>
+    </div>
+    <div class="controls-hint">
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> to move<br>
+      <kbd>Space</kbd> to boost · <kbd>Mouse</kbd> click also works
+    </div>
+    <span class="version">v1.1</span>
+  </div>
+
+  <canvas id="game"></canvas>
+  <div class="mode-tag" id="mode-tag"></div>
+
+  <div id="hud">
+    <div class="hud-left">
+      <div class="leaderboard" id="leaderboard"></div>
+    </div>
+    <div class="hud-right">
+      <div class="status-bar">
+        <div class="status-pill"><span>Score:</span> <strong id="hud-score">0</strong></div>
+        <div class="status-pill"><span>Boost:</span><div class="boost-indicator" id="boost-dot"></div></div>
+        <div class="status-pill" id="powerup-pill" style="display:none">
+          <span class="powerup-badge" id="powerup-badge"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="death-overlay">
+    <h2>☠️ Consumed by Gravity</h2>
+    <p>You were absorbed...</p>
+    <div class="timer" id="respawn-timer">3</div>
+  </div>
+
+  <div id="mobile-controls">
+    <div class="joystick-area" id="joystick"><div class="joystick-knob" id="joystick-knob"></div></div>
+    <div class="boost-btn" id="boost-btn">BOOST</div>
+  </div>
+
+<script>
+(() => {
+  // ─── DOM ──────────────────────────────────────────────────
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const landing = document.getElementById('landing');
+  const nameInput = document.getElementById('name-input');
+  const playBtn = document.getElementById('play-btn');
+  const soloBtn = document.getElementById('solo-btn');
+  const modeTag = document.getElementById('mode-tag');
+  const hud = document.getElementById('hud');
+  const leaderboardEl = document.getElementById('leaderboard');
+  const hudScore = document.getElementById('hud-score');
+  const boostDot = document.getElementById('boost-dot');
+  const powerupPill = document.getElementById('powerup-pill');
+  const powerupBadge = document.getElementById('powerup-badge');
+  const deathOverlay = document.getElementById('death-overlay');
+  const respawnTimerEl = document.getElementById('respawn-timer');
+  const mobileControls = document.getElementById('mobile-controls');
+  const joystick = document.getElementById('joystick');
+  const joystickKnob = document.getElementById('joystick-knob');
+  const boostBtnEl = document.getElementById('boost-btn');
+
+  // ─── Constants ────────────────────────────────────────────
+  const ARENA_W = 3000, ARENA_H = 3000;
+  const INITIAL_RADIUS = 22, INITIAL_SPEED = 3.5;
+  const BOOST_SPEED = 10, BOOST_CD = 3000, BOOST_DURATION = 400;
+  const GRAVITY_RANGE = 150, GRAVITY_STRENGTH = 0.015;
+  const PUSH_FORCE = 8;
+  const ASTEROID_COUNT = 80, BLACK_HOLE_COUNT = 4, POWERUP_COUNT = 5;
+  const SHRINK_INTERVAL = 30000, SHRINK_AMOUNT = 50, MIN_ARENA = 600;
+  const RESPAWN_TIME = 3000;
+  const BOT_COUNT = 5;
+  const BOT_NAMES = ['Nova','Orbit','Quasar','Pulsar','Eclipse','Nebula','Cosmos','Vega','Sirius','Rigel','Atlas','Titan','Ares','Helios','Luna'];
+  const COLORS = ['#00f0ff','#ff00aa','#ffee00','#00ff66','#ff6600','#aa55ff','#ff3344','#44ddff','#88ff44','#ff88cc'];
+  const POWERUP_TYPES = ['speed','shield','gravity_amp','mass'];
+
+  // ─── State ────────────────────────────────────────────────
+  let mode = null; // 'solo' or 'multi'
+  let ws = null;
+  let myId = null;
+  let myColor = '#00f0ff';
+  let gameState = null;
+  let camX = 0, camY = 0;
+  let inputX = 0, inputY = 0;
+  let stars = [];
+  let particles = [];
+  let lastBoostTime = 0;
+  let connected = false;
+  let arenaW = ARENA_W, arenaH = ARENA_H;
+  let gameTime = 0;
+  let nextId = 1, nextAstId = 1, nextPwId = 1;
+  let soloPlayers = [];
+  let soloAsteroids = [];
+  let soloBlackHoles = [];
+  let soloPowerups = [];
+
+  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ─── Stars ────────────────────────────────────────────────
+  function initStars() {
+    stars = [];
+    for (let i = 0; i < 300; i++) {
+      stars.push({
+        x: Math.random() * 6000 - 1500, y: Math.random() * 6000 - 1500,
+        r: Math.random() * 1.5 + 0.3, bright: Math.random() * 0.5 + 0.3,
+        twinkle: Math.random() * Math.PI * 2, speed: Math.random() * 0.01 + 0.005
+      });
+    }
+  }
+  initStars();
+
+  // ─── Particles ────────────────────────────────────────────
+  function emitParticles(x, y, color, count, spread, life) {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * spread + 0.5;
+      particles.push({ x, y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed,
+        life: life||40, maxLife: life||40, color, r: Math.random()*3+1 });
+    }
+  }
+  function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy; p.vx *= 0.96; p.vy *= 0.96; p.life--;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  // ─── Input ────────────────────────────────────────────────
+  const keys = {};
+  window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'Space') { e.preventDefault(); doBoost(); }
+  });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  function getKeyboardInput() {
+    let dx = 0, dy = 0;
+    if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+    if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+    if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+    if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+    if (dx || dy) { const len = Math.hypot(dx, dy); return { dx: dx/len, dy: dy/len }; }
+    return null;
+  }
+
+  let mouseX = 0, mouseY = 0, mouseDown = false;
+  canvas.addEventListener('mousedown', () => { mouseDown = true; });
+  canvas.addEventListener('mouseup', () => { mouseDown = false; });
+  canvas.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+  canvas.addEventListener('dblclick', () => doBoost());
+
+  function getMouseInput() {
+    if (!mouseDown) return null;
+    const cx = canvas.width/2, cy = canvas.height/2;
+    const dx = mouseX - cx, dy = mouseY - cy, len = Math.hypot(dx, dy);
+    if (len < 20) return null;
+    return { dx: dx/len, dy: dy/len };
+  }
+
+  const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  let joystickActive = false, joystickDX = 0, joystickDY = 0;
+  if (isMobile) {
+    joystick.addEventListener('touchstart', e => { e.preventDefault(); joystickActive = true; handleJoystickMove(e.touches[0]); });
+    joystick.addEventListener('touchmove', e => { e.preventDefault(); if (joystickActive) handleJoystickMove(e.touches[0]); });
+    joystick.addEventListener('touchend', () => { joystickActive = false; joystickDX = 0; joystickDY = 0; joystickKnob.style.transform = 'translate(-50%, -50%)'; });
+    boostBtnEl.addEventListener('touchstart', e => { e.preventDefault(); doBoost(); });
+  }
+  function handleJoystickMove(touch) {
+    const rect = joystick.getBoundingClientRect();
+    const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+    const dx = touch.clientX - cx, dy = touch.clientY - cy, len = Math.hypot(dx, dy);
+    const maxR = 40, clampLen = Math.min(len, maxR);
+    const nx = len > 0 ? dx/len : 0, ny = len > 0 ? dy/len : 0;
+    joystickDX = nx * (clampLen/maxR); joystickDY = ny * (clampLen/maxR);
+    joystickKnob.style.transform = `translate(calc(-50% + ${nx*clampLen}px), calc(-50% + ${ny*clampLen}px))`;
+  }
+
+  function getActiveInput() {
+    const kb = getKeyboardInput();
+    if (kb) return kb;
+    if (joystickActive) return { dx: joystickDX, dy: joystickDY };
+    return getMouseInput();
+  }
+
+  // ─── Solo Engine ──────────────────────────────────────────
+  function rand(a, b) { return Math.random()*(b-a)+a; }
+  function dist(a, b) { return Math.hypot(a.x-b.x, a.y-b.y); }
+
+  function createSoloPlayer(id, name, color, isBot) {
+    return {
+      id, name, color, isBot: !!isBot,
+      x: rand(100, arenaW-100), y: rand(100, arenaH-100),
+      vx: 0, vy: 0, radius: INITIAL_RADIUS, speed: INITIAL_SPEED,
+      score: 0, alive: true, boosting: false, boostEnd: 0, lastBoost: 0,
+      powerup: null, powerupEnd: 0, kills: 0, deaths: 0, respawnAt: 0,
+      // bot state
+      botTarget: null, botDecisionTimer: 0
+    };
+  }
+
+  function initSolo() {
+    arenaW = ARENA_W; arenaH = ARENA_H; gameTime = 0;
+    nextId = 1; nextAstId = 1; nextPwId = 1;
+    myId = nextId++;
+    const playerName = nameInput.value.trim() || 'Player';
+    myColor = COLORS[0];
+    soloPlayers = [createSoloPlayer(myId, playerName, myColor, false)];
+
+    const botColors = COLORS.slice(1);
+    for (let i = 0; i < BOT_COUNT; i++) {
+      const c = botColors[i % botColors.length];
+      const n = BOT_NAMES[Math.floor(Math.random()*BOT_NAMES.length)];
+      soloPlayers.push(createSoloPlayer(nextId++, n, c, true));
+    }
+
+    soloAsteroids = [];
+    for (let i = 0; i < ASTEROID_COUNT; i++) {
+      soloAsteroids.push({ id: nextAstId++, x: rand(50,arenaW-50), y: rand(50,arenaH-50),
+        r: rand(4,10), vx: rand(-0.3,0.3), vy: rand(-0.3,0.3) });
+    }
+
+    soloBlackHoles = [];
+    for (let i = 0; i < BLACK_HOLE_COUNT; i++) {
+      soloBlackHoles.push({ x: rand(200,arenaW-200), y: rand(200,arenaH-200),
+        r: rand(30,50), pull: rand(0.03,0.06) });
+    }
+
+    soloPowerups = [];
+  }
+
+  function respawnPlayer(p) {
+    p.x = rand(100, arenaW-100); p.y = rand(100, arenaH-100);
+    p.vx = 0; p.vy = 0; p.radius = INITIAL_RADIUS; p.alive = true;
+    p.powerup = null; p.powerupEnd = 0;
+  }
+
+  // ─── Bot AI ───────────────────────────────────────────────
+  function updateBot(p, dt) {
+    if (!p.alive) return;
+    const now = Date.now();
+    p.botDecisionTimer -= dt;
+    if (p.botDecisionTimer <= 0) {
+      p.botDecisionTimer = rand(0.5, 2);
+      // Pick a target
+      const r = Math.random();
+      if (r < 0.4) {
+        // Find nearest asteroid
+        let best = null, bestD = Infinity;
+        for (const a of soloAsteroids) {
+          const d = dist(p, a);
+          if (d < bestD) { bestD = d; best = a; }
+        }
+        p.botTarget = best ? { x: best.x, y: best.y, type: 'asteroid' } : null;
+      } else if (r < 0.65) {
+        // Find nearest powerup
+        let best = null, bestD = Infinity;
+        for (const pw of soloPowerups) {
+          const d = dist(p, pw);
+          if (d < bestD) { bestD = d; best = pw; }
+        }
+        p.botTarget = best ? { x: best.x, y: best.y, type: 'powerup' } : null;
+      } else if (r < 0.85) {
+        // Hunt a smaller player
+        let best = null, bestD = Infinity;
+        for (const other of soloPlayers) {
+          if (other.id === p.id || !other.alive) continue;
+          if (p.radius > other.radius * 1.2) {
+            const d = dist(p, other);
+            if (d < bestD) { bestD = d; best = other; }
+          }
+        }
+        p.botTarget = best ? { x: best.x, y: best.y, type: 'hunt' } : null;
+      } else {
+        // Random wander
+        p.botTarget = { x: rand(200, arenaW-200), y: rand(200, arenaH-200), type: 'wander' };
+      }
+    }
+
+    if (p.botTarget) {
+      // Avoid black holes
+      let avoidX = 0, avoidY = 0;
+      for (const bh of soloBlackHoles) {
+        const d = dist(p, bh);
+        if (d < 200) {
+          const force = (200 - d) / 200;
+          avoidX += (p.x - bh.x) / d * force;
+          avoidY += (p.y - bh.y) / d * force;
+        }
+      }
+
+      const dx = p.botTarget.x - p.x + avoidX * 300;
+      const dy = p.botTarget.y - p.y + avoidY * 300;
+      const len = Math.hypot(dx, dy);
+      if (len > 5) {
+        p.vx += (dx / len) * 0.15;
+        p.vy += (dy / len) * 0.15;
+      }
+
+      // Boost if chasing or fleeing
+      if (p.botTarget.type === 'hunt' && dist(p, p.botTarget) < 200 && now - p.lastBoost >= BOOST_CD) {
+        p.boosting = true; p.boostEnd = now + BOOST_DURATION; p.lastBoost = now;
+      }
+
+      // Flee if bigger player is close
+      for (const other of soloPlayers) {
+        if (other.id === p.id || !other.alive) continue;
+        if (other.radius > p.radius * 1.3 && dist(p, other) < 200) {
+          p.botTarget = { x: p.x + (p.x - other.x) * 3, y: p.y + (p.y - other.y) * 3, type: 'flee' };
+          if (now - p.lastBoost >= BOOST_CD) {
+            p.boosting = true; p.boostEnd = now + BOOST_DURATION; p.lastBoost = now;
+          }
+          break;
+        }
+      }
+    }
+
+    // Clamp velocity
+    const spd = Math.hypot(p.vx, p.vy);
+    if (spd > 1) { p.vx /= spd; p.vy /= spd; }
+  }
+
+  // ─── Solo Physics Tick ────────────────────────────────────
+  function soloTick(dt) {
+    gameTime += dt;
+    const now = Date.now();
+
+    // Shrink arena
+    if (gameTime > 0 && Math.floor(gameTime) % (SHRINK_INTERVAL/1000) === 0 && gameTime - dt < Math.floor(gameTime)) {
+      arenaW = Math.max(MIN_ARENA, arenaW - SHRINK_AMOUNT);
+      arenaH = Math.max(MIN_ARENA, arenaH - SHRINK_AMOUNT);
+    }
+
+    // Spawn powerups
+    if (Math.random() < 0.01 && soloPowerups.length < POWERUP_COUNT) {
+      const type = POWERUP_TYPES[Math.floor(Math.random()*POWERUP_TYPES.length)];
+      soloPowerups.push({ id: nextPwId++, x: rand(100,arenaW-100), y: rand(100,arenaH-100),
+        type, r: 12, duration: type==='shield'?5000:type==='speed'?4000:type==='gravity_amp'?6000:0 });
+    }
+
+    // Move asteroids
+    for (const a of soloAsteroids) {
+      a.x += a.vx; a.y += a.vy;
+      if (a.x < a.r || a.x > arenaW-a.r) a.vx *= -1;
+      if (a.y < a.r || a.y > arenaH-a.r) a.vy *= -1;
+      a.x = Math.max(a.r, Math.min(arenaW-a.r, a.x));
+      a.y = Math.max(a.r, Math.min(arenaH-a.r, a.y));
+    }
+
+    const alivePlayers = soloPlayers.filter(p => p.alive);
+
+    for (const p of soloPlayers) {
+      if (!p.alive) {
+        if (now >= p.respawnAt && p.respawnAt > 0) respawnPlayer(p);
+        continue;
+      }
+
+      if (p.isBot) updateBot(p, dt);
+
+      const spd = (p.boosting && now < p.boostEnd) ? BOOST_SPEED :
+                  (p.powerup==='speed' && now < p.powerupEnd) ? p.speed*1.6 : p.speed;
+      p.x += p.vx * spd; p.y += p.vy * spd;
+      p.x = Math.max(p.radius, Math.min(arenaW-p.radius, p.x));
+      p.y = Math.max(p.radius, Math.min(arenaH-p.radius, p.y));
+
+      // Black holes
+      for (const bh of soloBlackHoles) {
+        const d = dist(p, bh);
+        if (d < bh.r + p.radius) {
+          p.alive = false; p.deaths++; p.respawnAt = now + RESPAWN_TIME; continue;
+        }
+        if (d < 250) {
+          const force = bh.pull * (1 - d/250);
+          const angle = Math.atan2(bh.y-p.y, bh.x-p.x);
+          p.vx += Math.cos(angle)*force; p.vy += Math.sin(angle)*force;
+        }
+      }
+
+      const gravRange = (p.powerup==='gravity_amp' && now < p.powerupEnd) ? GRAVITY_RANGE*2.5 : GRAVITY_RANGE;
+
+      for (let i = soloAsteroids.length-1; i >= 0; i--) {
+        const a = soloAsteroids[i];
+        const d = dist(p, a);
+        if (d < gravRange) {
+          const force = GRAVITY_STRENGTH * (1 - d/gravRange);
+          const angle = Math.atan2(p.y-a.y, p.x-a.x);
+          a.vx += Math.cos(angle)*force; a.vy += Math.sin(angle)*force;
+        }
+        if (d < p.radius + a.r) {
+          p.radius = Math.min(60, p.radius + a.r*0.15);
+          p.score += Math.round(a.r);
+          a.x = rand(50,arenaW-50); a.y = rand(50,arenaH-50); a.r = rand(4,10);
+        }
+      }
+
+      for (let i = soloPowerups.length-1; i >= 0; i--) {
+        const pw = soloPowerups[i];
+        if (dist(p, pw) < p.radius + pw.r) {
+          if (pw.type === 'mass') { p.radius = Math.min(60, p.radius+8); p.score += 50; }
+          else { p.powerup = pw.type; p.powerupEnd = now + pw.duration; }
+          soloPowerups.splice(i, 1);
+        }
+      }
+
+      p.vx *= 0.92; p.vy *= 0.92;
+    }
+
+    // Player-player collisions
+    for (let i = 0; i < alivePlayers.length; i++) {
+      for (let j = i+1; j < alivePlayers.length; j++) {
+        const a = alivePlayers[i], b = alivePlayers[j];
+        const d = dist(a, b), minDist = a.radius + b.radius;
+        if (d < minDist && d > 0) {
+          const shieldA = a.powerup==='shield' && now < a.powerupEnd;
+          const shieldB = b.powerup==='shield' && now < b.powerupEnd;
+          if (a.radius > b.radius*1.3 && !shieldB) {
+            b.alive = false; b.deaths++; b.respawnAt = now+RESPAWN_TIME;
+            a.radius = Math.min(60, a.radius+b.radius*0.3); a.score += b.score; a.kills++;
+          } else if (b.radius > a.radius*1.3 && !shieldA) {
+            a.alive = false; a.deaths++; a.respawnAt = now+RESPAWN_TIME;
+            b.radius = Math.min(60, b.radius+a.radius*0.3); b.score += a.score; b.kills++;
+          } else {
+            const angle = Math.atan2(b.y-a.y, b.x-a.x);
+            const push = PUSH_FORCE * (minDist-d)/minDist;
+            if (!shieldA) { a.vx -= Math.cos(angle)*push; a.vy -= Math.sin(angle)*push; }
+            if (!shieldB) { b.vx += Math.cos(angle)*push; b.vy += Math.sin(angle)*push; }
+          }
+        }
+      }
+    }
+  }
+
+  function buildSoloState() {
+    const now = Date.now();
+    return {
+      time: Math.floor(gameTime),
+      arena: { w: arenaW, h: arenaH },
+      you: myId,
+      players: soloPlayers.map(p => ({
+        id: p.id, name: p.name, x: Math.round(p.x), y: Math.round(p.y),
+        r: Math.round(p.radius*10)/10, color: p.color, score: p.score, alive: p.alive,
+        boosting: p.boosting && now < p.boostEnd,
+        powerup: (p.powerup && now < p.powerupEnd) ? p.powerup : null,
+        kills: p.kills, deaths: p.deaths
+      })),
+      asteroids: soloAsteroids.map(a => ({ id: a.id, x: Math.round(a.x), y: Math.round(a.y), r: Math.round(a.r*10)/10 })),
+      blackHoles: soloBlackHoles.map(bh => ({ x: Math.round(bh.x), y: Math.round(bh.y), r: Math.round(bh.r) })),
+      powerups: soloPowerups.map(pw => ({ id: pw.id, x: Math.round(pw.x), y: Math.round(pw.y), type: pw.type, r: pw.r }))
+    };
+  }
+
+  // ─── Multiplayer Network ──────────────────────────────────
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}`);
+    ws.onopen = () => {
+      connected = true;
+      ws.send(JSON.stringify({ t: 'name', name: nameInput.value.trim() || 'Player' }));
+    };
+    ws.onmessage = e => {
+      const msg = JSON.parse(e.data);
+      if (msg.t === 'welcome') { myId = msg.id; myColor = msg.color; enterGame(); }
+      if (msg.t === 'state') gameState = msg;
+    };
+    ws.onclose = () => { connected = false; setTimeout(connect, 2000); };
+  }
+
+  function sendInputMulti() {
+    if (!ws || ws.readyState !== 1) return;
+    const input = getActiveInput();
+    ws.send(JSON.stringify({ t: 'input', dx: input?input.dx:0, dy: input?input.dy:0 }));
+  }
+  function sendBoostMulti() {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'boost' }));
+  }
+
+  // ─── Boost ────────────────────────────────────────────────
+  function doBoost() {
+    const now = Date.now();
+    if (now - lastBoostTime < BOOST_CD) return;
+    lastBoostTime = now;
+    if (mode === 'multi') { sendBoostMulti(); return; }
+    // Solo boost
+    const me = soloPlayers.find(p => p.id === myId);
+    if (me && me.alive) {
+      me.boosting = true; me.boostEnd = now + BOOST_DURATION; me.lastBoost = now;
+    }
+  }
+
+  // ─── Enter Game ───────────────────────────────────────────
+  function enterGame() {
+    landing.style.display = 'none';
+    hud.classList.add('active');
+    modeTag.classList.add('active');
+    if (isMobile) mobileControls.classList.add('active');
+  }
+
+  // ─── Rendering ────────────────────────────────────────────
+  function drawStars(time) {
+    for (const s of stars) {
+      const sx = s.x - camX*0.1, sy = s.y - camY*0.1;
+      const screenX = ((sx%canvas.width)+canvas.width)%canvas.width;
+      const screenY = ((sy%canvas.height)+canvas.height)%canvas.height;
+      const twinkle = Math.sin(time*s.speed+s.twinkle)*0.3+0.7;
+      ctx.beginPath(); ctx.arc(screenX, screenY, s.r, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(200,210,255,${s.bright*twinkle})`; ctx.fill();
+    }
+  }
+  function toScreen(wx, wy) { return { x: wx-camX+canvas.width/2, y: wy-camY+canvas.height/2 }; }
+
+  function drawArena(arena) {
+    const tl = toScreen(0,0), br = toScreen(arena.w, arena.h);
+    ctx.strokeStyle = 'rgba(0,240,255,0.15)'; ctx.lineWidth = 3;
+    ctx.setLineDash([10,10]); ctx.strokeRect(tl.x, tl.y, br.x-tl.x, br.y-tl.y); ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.02)'; ctx.lineWidth = 1;
+    const gridSize = 100;
+    const startX = Math.floor(camX/gridSize)*gridSize, startY = Math.floor(camY/gridSize)*gridSize;
+    for (let x = startX; x < camX+canvas.width/2; x += gridSize) {
+      const s = toScreen(x,0); ctx.beginPath(); ctx.moveTo(s.x,tl.y); ctx.lineTo(s.x,br.y); ctx.stroke();
+    }
+    for (let y = startY; y < camY+canvas.height/2; y += gridSize) {
+      const s = toScreen(0,y); ctx.beginPath(); ctx.moveTo(tl.x,s.y); ctx.lineTo(br.x,s.y); ctx.stroke();
+    }
+  }
+
+  function drawBlackHoles(bhs, time) {
+    for (const bh of bhs) {
+      const s = toScreen(bh.x, bh.y);
+      for (let ring = 3; ring >= 1; ring--) {
+        const r = bh.r + ring*20;
+        ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(168,85,247,${0.03/ring})`; ctx.fill();
+      }
+      const coreGrad = ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,bh.r);
+      coreGrad.addColorStop(0,'rgba(0,0,0,1)'); coreGrad.addColorStop(0.7,'rgba(20,0,40,0.9)'); coreGrad.addColorStop(1,'rgba(168,85,247,0.3)');
+      ctx.beginPath(); ctx.arc(s.x,s.y,bh.r,0,Math.PI*2); ctx.fillStyle = coreGrad; ctx.fill();
+      for (let i = 0; i < 3; i++) {
+        const angle = time*0.001+(i*Math.PI*2/3);
+        ctx.beginPath(); ctx.arc(s.x,s.y,bh.r*0.6,angle,angle+1.2);
+        ctx.strokeStyle = `rgba(168,85,247,${0.3+Math.sin(time*0.003+i)*0.15})`; ctx.lineWidth = 2; ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(168,85,247,0.5)'; ctx.font = '10px system-ui'; ctx.textAlign = 'center';
+      ctx.fillText('BLACK HOLE', s.x, s.y+bh.r+16);
+    }
+  }
+
+  function drawAsteroids(asteroids) {
+    for (const a of asteroids) {
+      const s = toScreen(a.x, a.y);
+      const glow = ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,a.r*3);
+      glow.addColorStop(0,'rgba(255,200,50,0.15)'); glow.addColorStop(1,'transparent');
+      ctx.beginPath(); ctx.arc(s.x,s.y,a.r*3,0,Math.PI*2); ctx.fillStyle = glow; ctx.fill();
+      ctx.beginPath(); ctx.arc(s.x,s.y,a.r,0,Math.PI*2); ctx.fillStyle = '#c8a040'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,220,100,0.5)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+  }
+
+  function drawPowerups(powerups, time) {
+    for (const pw of powerups) {
+      const s = toScreen(pw.x, pw.y);
+      const pulse = Math.sin(time*0.005)*4+16;
+      let color, icon;
+      switch (pw.type) {
+        case 'speed': color='#0f0'; icon='⚡'; break;
+        case 'shield': color='#0af'; icon='🛡'; break;
+        case 'gravity_amp': color='#f0a'; icon='🌀'; break;
+        case 'mass': color='#ff0'; icon='💎'; break;
+        default: color='#fff'; icon='?';
+      }
+      const glow = ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,pulse);
+      glow.addColorStop(0,color+'33'); glow.addColorStop(1,'transparent');
+      ctx.beginPath(); ctx.arc(s.x,s.y,pulse,0,Math.PI*2); ctx.fillStyle = glow; ctx.fill();
+      ctx.font = '16px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(icon, s.x, s.y);
+    }
+  }
+
+  function drawPlayer(p, time) {
+    const s = toScreen(p.x, p.y);
+    const isMe = p.id === myId;
+    const gravRange = p.powerup==='gravity_amp' ? 250 : 150;
+    const fieldGrad = ctx.createRadialGradient(s.x,s.y,p.r,s.x,s.y,gravRange);
+    fieldGrad.addColorStop(0,p.color+'08'); fieldGrad.addColorStop(1,'transparent');
+    ctx.beginPath(); ctx.arc(s.x,s.y,gravRange,0,Math.PI*2); ctx.fillStyle = fieldGrad; ctx.fill();
+    if (p.powerup==='shield') {
+      ctx.beginPath(); ctx.arc(s.x,s.y,p.r+6,0,Math.PI*2);
+      ctx.strokeStyle = '#0af5'; ctx.lineWidth = 3; ctx.setLineDash([5,5]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    const bodyGrad = ctx.createRadialGradient(s.x-p.r*0.3,s.y-p.r*0.3,p.r*0.1,s.x,s.y,p.r);
+    bodyGrad.addColorStop(0,lightenColor(p.color,60)); bodyGrad.addColorStop(0.6,p.color); bodyGrad.addColorStop(1,darkenColor(p.color,40));
+    ctx.beginPath(); ctx.arc(s.x,s.y,p.r,0,Math.PI*2); ctx.fillStyle = bodyGrad; ctx.fill();
+    ctx.beginPath(); ctx.arc(s.x,s.y,p.r+2,0,Math.PI*2);
+    ctx.strokeStyle = p.color+(p.boosting?'cc':'66'); ctx.lineWidth = p.boosting?4:2; ctx.stroke();
+    if (p.boosting) emitParticles(s.x,s.y,p.color,2,3,20);
+    ctx.font = `bold ${isMe?13:11}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = isMe?'#fff':'#aaa'; ctx.fillText(p.name, s.x, s.y-p.r-8);
+    ctx.font = '10px system-ui'; ctx.fillStyle = '#667'; ctx.fillText(p.score, s.x, s.y-p.r+6);
+    if (isMe && (inputX||inputY)) {
+      const arrowDist = p.r+18;
+      ctx.beginPath(); ctx.arc(s.x+inputX*arrowDist, s.y+inputY*arrowDist, 3, 0, Math.PI*2);
+      ctx.fillStyle = '#0ff'; ctx.fill();
+    }
+  }
+
+  function drawParticlesFn() {
+    for (const p of particles) {
+      const s = toScreen(p.x, p.y);
+      const alpha = p.life/p.maxLife;
+      ctx.beginPath(); ctx.arc(s.x,s.y,p.r*alpha,0,Math.PI*2);
+      ctx.fillStyle = p.color+Math.round(alpha*255).toString(16).padStart(2,'0'); ctx.fill();
+    }
+  }
+
+  function drawMinimap(arena, players) {
+    const size = 140, padding = 16;
+    const mx = canvas.width-size-padding, my = canvas.height-size-padding;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(mx,my,size,size,8); ctx.fill(); ctx.stroke();
+    const sx = size/arena.w, sy = size/arena.h;
+    for (const p of players) {
+      if (!p.alive) continue;
+      ctx.beginPath(); ctx.arc(mx+p.x*sx, my+p.y*sy, p.id===myId?4:2.5, 0, Math.PI*2);
+      ctx.fillStyle = p.color; ctx.fill();
+    }
+    const vx = mx+(camX-canvas.width/2)*sx, vy = my+(camY-canvas.height/2)*sy;
+    ctx.strokeStyle = 'rgba(0,240,255,0.3)'; ctx.lineWidth = 1;
+    ctx.strokeRect(vx,vy,canvas.width*sx,canvas.height*sy);
+  }
+
+  function lightenColor(hex,amt) {
+    const r=Math.min(255,parseInt(hex.slice(1,3),16)+amt), g=Math.min(255,parseInt(hex.slice(3,5),16)+amt), b=Math.min(255,parseInt(hex.slice(5,7),16)+amt);
+    return `rgb(${r},${g},${b})`;
+  }
+  function darkenColor(hex,amt) {
+    const r=Math.max(0,parseInt(hex.slice(1,3),16)-amt), g=Math.max(0,parseInt(hex.slice(3,5),16)-amt), b=Math.max(0,parseInt(hex.slice(5,7),16)-amt);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function updateHUD() {
+    if (!gameState) return;
+    const me = gameState.players.find(p => p.id === myId);
+    if (!me) return;
+    hudScore.textContent = me.score;
+    const now = Date.now();
+    boostDot.className = 'boost-indicator'+(now-lastBoostTime>=BOOST_CD?'':' cooldown');
+    if (me.powerup) {
+      powerupPill.style.display = '';
+      const labels = {speed:'⚡ Speed',shield:'🛡 Shield',gravity_amp:'🌀 Gravity',mass:'💎 Mass'};
+      powerupBadge.textContent = labels[me.powerup]||me.powerup;
+      const colors = {speed:'#0f0',shield:'#0af',gravity_amp:'#f0a',mass:'#ff0'};
+      powerupBadge.style.background = (colors[me.powerup]||'#fff')+'33';
+      powerupBadge.style.color = colors[me.powerup]||'#fff';
+    } else { powerupPill.style.display = 'none'; }
+    if (!me.alive) { deathOverlay.classList.add('active'); respawnTimerEl.textContent = 'Respawning...'; }
+    else { deathOverlay.classList.remove('active'); }
+    const sorted = [...gameState.players].sort((a,b)=>b.score-a.score);
+    let lbHTML = '<h3>🏆 Leaderboard</h3>';
+    sorted.slice(0,6).forEach(p => {
+      const youClass = p.id===myId?' you':'';
+      lbHTML += `<div class="entry${youClass}"><div class="dot" style="background:${p.color}"></div><span class="name">${p.name}</span><span class="score">${p.score}</span></div>`;
+    });
+    leaderboardEl.innerHTML = lbHTML;
+  }
+
+  // ─── Main Loop ────────────────────────────────────────────
+  let lastTime = 0;
+  function render(time) {
+    requestAnimationFrame(render);
+    const dt = Math.min((time - lastTime) / 1000, 0.1);
+    lastTime = time;
+
+    if (mode === 'solo') {
+      soloTick(dt);
+      gameState = buildSoloState();
+    }
+
+    if (!gameState) return;
+
+    const me = gameState.players.find(p => p.id === myId);
+    if (me && me.alive) {
+      camX += (me.x - camX) * 0.12;
+      camY += (me.y - camY) * 0.12;
+      inputX = 0; inputY = 0;
+      const input = getActiveInput();
+      if (input) { inputX = input.dx; inputY = input.dy; }
+    }
+
+    if (mode === 'multi') sendInputMulti();
+    updateParticles();
+
+    ctx.fillStyle = '#050510'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    drawStars(time);
+    drawArena(gameState.arena);
+    drawBlackHoles(gameState.blackHoles, time);
+    drawAsteroids(gameState.asteroids);
+    drawPowerups(gameState.powerups, time);
+    drawParticlesFn();
+    for (const p of gameState.players) { if (p.alive) drawPlayer(p, time); }
+    drawMinimap(gameState.arena, gameState.players);
+    updateHUD();
+  }
+
+  // ─── Start ────────────────────────────────────────────────
+  soloBtn.addEventListener('click', () => {
+    mode = 'solo';
+    modeTag.textContent = '🎮 Solo Mode — vs AI Bots';
+    initSolo();
+    enterGame();
+  });
+
+  playBtn.addEventListener('click', () => {
+    mode = 'multi';
+    modeTag.textContent = '🌐 Multiplayer';
+    playBtn.textContent = 'Connecting...'; playBtn.disabled = true;
+    connect();
+  });
+
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') soloBtn.click(); });
+
+  requestAnimationFrame(render);
+})();
+</script>
+</body>
+</html>
