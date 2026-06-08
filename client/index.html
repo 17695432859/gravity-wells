@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Gravity Wells</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', system-ui, sans-serif; }
+  canvas { display: block; }
+
+  /* ─── Landing Screen ─── */
+  #landing {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, #0a0a2e 0%, #000005 100%);
+  }
+  #landing h1 {
+    font-size: clamp(2rem, 8vw, 5rem); font-weight: 900;
+    background: linear-gradient(135deg, #00f0ff, #a855f7, #ff00aa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text; text-fill-color: transparent;
+    letter-spacing: -2px; margin-bottom: 0.5rem;
+    text-shadow: 0 0 60px rgba(0,240,255,0.3);
+    animation: titlePulse 3s ease-in-out infinite;
+  }
+  @keyframes titlePulse {
+    0%,100% { filter: brightness(1); }
+    50% { filter: brightness(1.3); }
+  }
+  #landing .subtitle {
+    color: #667; font-size: clamp(0.8rem, 2.5vw, 1.1rem); margin-bottom: 2rem;
+    letter-spacing: 4px; text-transform: uppercase;
+  }
+  #landing input {
+    width: min(320px, 80vw); padding: 14px 20px; font-size: 1.1rem;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px; color: #fff; outline: none; text-align: center;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  #landing input:focus {
+    border-color: #00f0ff;
+    box-shadow: 0 0 20px rgba(0,240,255,0.2);
+  }
+  #landing input::placeholder { color: #556; }
+  #landing button {
+    margin-top: 1rem; padding: 14px 48px; font-size: 1.1rem; font-weight: 700;
+    background: linear-gradient(135deg, #00f0ff, #a855f7);
+    border: none; border-radius: 12px; color: #000; cursor: pointer;
+    letter-spacing: 1px; text-transform: uppercase;
+    transition: transform 0.15s, box-shadow 0.3s;
+  }
+  #landing button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(0,240,255,0.4);
+  }
+  #landing .controls-hint {
+    margin-top: 2.5rem; color: #445; font-size: 0.85rem; text-align: center; line-height: 1.8;
+  }
+  #landing .controls-hint kbd {
+    background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.12); font-family: inherit;
+  }
+  .connecting { color: #ff0 !important; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0.3; } }
+  #landing .version { position: absolute; bottom: 1rem; color: #334; font-size: 0.75rem; }
+
+  /* ─── HUD ─── */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    display: none; pointer-events: none; padding: 16px;
+  }
+  #hud.active { display: flex; justify-content: space-between; align-items: flex-start; }
+  .hud-left, .hud-right { pointer-events: auto; }
+
+  /* Leaderboard */
+  .leaderboard {
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+    padding: 12px 16px; min-width: 180px;
+  }
+  .leaderboard h3 {
+    color: #889; font-size: 0.7rem; letter-spacing: 2px;
+    text-transform: uppercase; margin-bottom: 8px;
+  }
+  .leaderboard .entry {
+    display: flex; align-items: center; gap: 8px; padding: 3px 0;
+    font-size: 0.85rem;
+  }
+  .leaderboard .dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .leaderboard .name { color: #ccc; flex: 1; }
+  .leaderboard .score { color: #889; font-variant-numeric: tabular-nums; }
+  .leaderboard .you { color: #0ff; font-weight: 600; }
+
+  /* Status bar */
+  .status-bar {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .status-pill {
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
+    padding: 6px 14px; font-size: 0.8rem; color: #aab;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .boost-indicator {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #0f0; box-shadow: 0 0 6px #0f0;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .boost-indicator.cooldown { background: #444; box-shadow: none; }
+  .powerup-badge {
+    padding: 3px 10px; border-radius: 10px; font-size: 0.75rem;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  }
+
+  /* Death overlay */
+  #death-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+    flex-direction: column; gap: 1rem;
+  }
+  #death-overlay.active { display: flex; }
+  #death-overlay h2 { color: #f33; font-size: 2rem; }
+  #death-overlay p { color: #889; font-size: 1rem; }
+  #death-overlay .timer { color: #ff0; font-size: 1.5rem; font-weight: 700; }
+
+  /* Mobile controls */
+  #mobile-controls {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 55; display: none; gap: 20px; align-items: center;
+  }
+  #mobile-controls.active { display: flex; }
+  .joystick-area {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1);
+    position: relative; touch-action: none;
+  }
+  .joystick-knob {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(0,240,255,0.3); border: 2px solid rgba(0,240,255,0.5);
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .boost-btn {
+    width: 70px; height: 70px; border-radius: 50%;
+    background: rgba(168,85,247,0.2); border: 2px solid rgba(168,85,247,0.4);
+    color: #a855f7; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: manipulation;
+  }
+  .boost-btn:active { background: rgba(168,85,247,0.5); }
+</style>
+</head>
+<body>
+  <!-- Landing -->
+  <div id="landing">
+    <h1>GRAVITY WELLS</h1>
+    <p class="subtitle">Collect · Grow · Dominate</p>
+    <input id="name-input" type="text" placeholder="Enter your name" maxlength="12" autocomplete="off">
+    <button id="play-btn">Play</button>
+    <div class="controls-hint">
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> to move<br>
+      <kbd>Space</kbd> to boost · <kbd>Mouse</kbd> also works
+    </div>
+    <span class="version">v1.0</span>
+  </div>
+
+  <!-- Canvas -->
+  <canvas id="game"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-left">
+      <div class="leaderboard" id="leaderboard"></div>
+    </div>
+    <div class="hud-right">
+      <div class="status-bar">
+        <div class="status-pill">
+          <span>Score:</span> <strong id="hud-score">0</strong>
+        </div>
+        <div class="status-pill">
+          <span>Boost:</span>
+          <div class="boost-indicator" id="boost-dot"></div>
+        </div>
+        <div class="status-pill" id="powerup-pill" style="display:none">
+          <span class="powerup-badge" id="powerup-badge"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Death overlay -->
+  <div id="death-overlay">
+    <h2>☠️ Consumed by Gravity</h2>
+    <p>You were absorbed...</p>
+    <div class="timer" id="respawn-timer">3</div>
+  </div>
+
+  <!-- Mobile controls -->
+  <div id="mobile-controls">
+    <div class="joystick-area" id="joystick">
+      <div class="joystick-knob" id="joystick-knob"></div>
+    </div>
+    <div class="boost-btn" id="boost-btn">BOOST</div>
+  </div>
+
+<script>
+(() => {
+  // ─── DOM ──────────────────────────────────────────────────
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const landing = document.getElementById('landing');
+  const nameInput = document.getElementById('name-input');
+  const playBtn = document.getElementById('play-btn');
+  const hud = document.getElementById('hud');
+  const leaderboardEl = document.getElementById('leaderboard');
+  const hudScore = document.getElementById('hud-score');
+  const boostDot = document.getElementById('boost-dot');
+  const powerupPill = document.getElementById('powerup-pill');
+  const powerupBadge = document.getElementById('powerup-badge');
+  const deathOverlay = document.getElementById('death-overlay');
+  const respawnTimer = document.getElementById('respawn-timer');
+  const mobileControls = document.getElementById('mobile-controls');
+  const joystick = document.getElementById('joystick');
+  const joystickKnob = document.getElementById('joystick-knob');
+  const boostBtn = document.getElementById('boost-btn');
+
+  // ─── State ────────────────────────────────────────────────
+  let ws = null;
+  let myId = null;
+  let myColor = '#00f0ff';
+  let gameState = null;
+  let camX = 0, camY = 0;
+  let inputX = 0, inputY = 0;
+  let stars = [];
+  let particles = [];
+  let lastBoostTime = 0;
+  const BOOST_CD = 3000;
+  let connected = false;
+  let deadUntil = 0;
+
+  // Canvas size
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ─── Stars background ─────────────────────────────────────
+  function initStars() {
+    stars = [];
+    for (let i = 0; i < 300; i++) {
+      stars.push({
+        x: Math.random() * 6000 - 1500,
+        y: Math.random() * 6000 - 1500,
+        r: Math.random() * 1.5 + 0.3,
+        bright: Math.random() * 0.5 + 0.3,
+        twinkle: Math.random() * Math.PI * 2,
+        speed: Math.random() * 0.01 + 0.005
+      });
+    }
+  }
+  initStars();
+
+  // ─── Particles ────────────────────────────────────────────
+  function emitParticles(x, y, color, count, spread, life) {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * spread + 0.5;
+      particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: life || 40,
+        maxLife: life || 40,
+        color,
+        r: Math.random() * 3 + 1
+      });
+    }
+  }
+
+  function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.96;
+      p.vy *= 0.96;
+      p.life--;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  // ─── Input ────────────────────────────────────────────────
+  const keys = {};
+  window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'Space' && connected) {
+      e.preventDefault();
+      sendBoost();
+    }
+  });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  function getKeyboardInput() {
+    let dx = 0, dy = 0;
+    if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+    if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+    if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+    if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+    if (dx || dy) {
+      const len = Math.hypot(dx, dy);
+      return { dx: dx / len, dy: dy / len };
+    }
+    return null;
+  }
+
+  // Mouse input
+  let mouseX = 0, mouseY = 0, mouseDown = false;
+  canvas.addEventListener('mousedown', () => { mouseDown = true; });
+  canvas.addEventListener('mouseup', () => { mouseDown = false; });
+  canvas.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+  canvas.addEventListener('dblclick', () => { if (connected) sendBoost(); });
+
+  function getMouseInput() {
+    if (!mouseDown) return null;
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const dx = mouseX - cx;
+    const dy = mouseY - cy;
+    const len = Math.hypot(dx, dy);
+    if (len < 20) return null;
+    return { dx: dx / len, dy: dy / len };
+  }
+
+  // Touch / Joystick
+  const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  let joystickActive = false;
+  let joystickDX = 0, joystickDY = 0;
+
+  if (isMobile) {
+    joystick.addEventListener('touchstart', e => {
+      e.preventDefault();
+      joystickActive = true;
+      handleJoystickMove(e.touches[0]);
+    });
+    joystick.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (joystickActive) handleJoystickMove(e.touches[0]);
+    });
+    joystick.addEventListener('touchend', () => {
+      joystickActive = false;
+      joystickDX = 0;
+      joystickDY = 0;
+      joystickKnob.style.transform = 'translate(-50%, -50%)';
+    });
+    boostBtn.addEventListener('touchstart', e => {
+      e.preventDefault();
+      sendBoost();
+    });
+  }
+
+  function handleJoystickMove(touch) {
+    const rect = joystick.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = touch.clientX - cx;
+    const dy = touch.clientY - cy;
+    const len = Math.hypot(dx, dy);
+    const maxR = 40;
+    const clampLen = Math.min(len, maxR);
+    const nx = len > 0 ? dx / len : 0;
+    const ny = len > 0 ? dy / len : 0;
+    joystickDX = nx * (clampLen / maxR);
+    joystickDY = ny * (clampLen / maxR);
+    joystickKnob.style.transform = `translate(calc(-50% + ${nx * clampLen}px), calc(-50% + ${ny * clampLen}px))`;
+  }
+
+  // ─── Network ──────────────────────────────────────────────
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}`);
+
+    ws.onopen = () => {
+      connected = true;
+      ws.send(JSON.stringify({ t: 'name', name: nameInput.value.trim() || 'Player' }));
+    };
+
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.t === 'welcome') {
+        myId = msg.id;
+        myColor = msg.color;
+        landing.style.display = 'none';
+        hud.classList.add('active');
+        if (isMobile) mobileControls.classList.add('active');
+      }
+      if (msg.t === 'state') {
+        gameState = msg;
+      }
+    };
+
+    ws.onclose = () => {
+      connected = false;
+      setTimeout(connect, 2000);
+    };
+  }
+
+  function sendInput() {
+    if (!ws || ws.readyState !== 1) return;
+    let input = getKeyboardInput() || getMouseInput();
+    if (joystickActive) input = { dx: joystickDX, dy: joystickDY };
+    if (input) {
+      ws.send(JSON.stringify({ t: 'input', dx: input.dx, dy: input.dy }));
+    } else {
+      ws.send(JSON.stringify({ t: 'input', dx: 0, dy: 0 }));
+    }
+  }
+
+  function sendBoost() {
+    const now = Date.now();
+    if (now - lastBoostTime < BOOST_CD) return;
+    lastBoostTime = now;
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ t: 'boost' }));
+    }
+  }
+
+  // ─── Rendering ────────────────────────────────────────────
+  function drawStars(time) {
+    for (const s of stars) {
+      const sx = s.x - camX * 0.1;
+      const sy = s.y - camY * 0.1;
+      const screenX = ((sx % canvas.width) + canvas.width) % canvas.width;
+      const screenY = ((sy % canvas.height) + canvas.height) % canvas.height;
+      const twinkle = Math.sin(time * s.speed + s.twinkle) * 0.3 + 0.7;
+      const alpha = s.bright * twinkle;
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(200,210,255,${alpha})`;
+      ctx.fill();
+    }
+  }
+
+  function toScreen(wx, wy) {
+    return { x: wx - camX + canvas.width / 2, y: wy - camY + canvas.height / 2 };
+  }
+
+  function drawArena(arena) {
+    const tl = toScreen(0, 0);
+    const br = toScreen(arena.w, arena.h);
+
+    // Arena border glow
+    ctx.strokeStyle = 'rgba(0,240,255,0.15)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 10]);
+    ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+    ctx.setLineDash([]);
+
+    // Danger zone near edges
+    const danger = 80;
+    const grad = ctx.createLinearGradient(tl.x, tl.y, tl.x + danger, tl.y);
+    grad.addColorStop(0, 'rgba(255,0,50,0.08)');
+    grad.addColorStop(1, 'transparent');
+
+    // Grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+    ctx.lineWidth = 1;
+    const gridSize = 100;
+    const startX = Math.floor(camX / gridSize) * gridSize;
+    const startY = Math.floor(camY / gridSize) * gridSize;
+    for (let x = startX; x < camX + canvas.width / 2; x += gridSize) {
+      const s = toScreen(x, 0);
+      ctx.beginPath();
+      ctx.moveTo(s.x, tl.y);
+      ctx.lineTo(s.x, br.y);
+      ctx.stroke();
+    }
+    for (let y = startY; y < camY + canvas.height / 2; y += gridSize) {
+      const s = toScreen(0, y);
+      ctx.beginPath();
+      ctx.moveTo(tl.x, s.y);
+      ctx.lineTo(br.x, s.y);
+      ctx.stroke();
+    }
+  }
+
+  function drawBlackHoles(bhs, time) {
+    for (const bh of bhs) {
+      const s = toScreen(bh.x, bh.y);
+      // Accretion disk
+      for (let ring = 3; ring >= 1; ring--) {
+        const r = bh.r + ring * 20;
+        const alpha = 0.03 / ring;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(168,85,247,${alpha})`;
+        ctx.fill();
+      }
+      // Core
+      const coreGrad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, bh.r);
+      coreGrad.addColorStop(0, 'rgba(0,0,0,1)');
+      coreGrad.addColorStop(0.7, 'rgba(20,0,40,0.9)');
+      coreGrad.addColorStop(1, 'rgba(168,85,247,0.3)');
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, bh.r, 0, Math.PI * 2);
+      ctx.fillStyle = coreGrad;
+      ctx.fill();
+      // Swirl lines
+      for (let i = 0; i < 3; i++) {
+        const angle = time * 0.001 + (i * Math.PI * 2 / 3);
+        const dist = bh.r * 0.6;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, dist, angle, angle + 1.2);
+        ctx.strokeStyle = `rgba(168,85,247,${0.3 + Math.sin(time * 0.003 + i) * 0.15})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      // Label
+      ctx.fillStyle = 'rgba(168,85,247,0.5)';
+      ctx.font = '10px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('BLACK HOLE', s.x, s.y + bh.r + 16);
+    }
+  }
+
+  function drawAsteroids(asteroids) {
+    for (const a of asteroids) {
+      const s = toScreen(a.x, a.y);
+      // Glow
+      const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, a.r * 3);
+      glow.addColorStop(0, 'rgba(255,200,50,0.15)');
+      glow.addColorStop(1, 'transparent');
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, a.r * 3, 0, Math.PI * 2);
+      ctx.fillStyle = glow;
+      ctx.fill();
+      // Body
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, a.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#c8a040';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,220,100,0.5)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  function drawPowerups(powerups, time) {
+    for (const pw of powerups) {
+      const s = toScreen(pw.x, pw.y);
+      const pulse = Math.sin(time * 0.005) * 4 + 16;
+      let color, icon;
+      switch (pw.type) {
+        case 'speed': color = '#0f0'; icon = '⚡'; break;
+        case 'shield': color = '#0af'; icon = '🛡'; break;
+        case 'gravity_amp': color = '#f0a'; icon = '🌀'; break;
+        case 'mass': color = '#ff0'; icon = '💎'; break;
+        default: color = '#fff'; icon = '?';
+      }
+      // Glow
+      const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, pulse);
+      glow.addColorStop(0, color + '33');
+      glow.addColorStop(1, 'transparent');
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, pulse, 0, Math.PI * 2);
+      ctx.fillStyle = glow;
+      ctx.fill();
+      // Icon
+      ctx.font = '16px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(icon, s.x, s.y);
+    }
+  }
+
+  function drawPlayer(p, time) {
+    const s = toScreen(p.x, p.y);
+    const isMe = p.id === myId;
+
+    // Gravity field indicator
+    const gravRange = p.powerup === 'gravity_amp' ? 250 : 150;
+    const fieldGrad = ctx.createRadialGradient(s.x, s.y, p.r, s.x, s.y, gravRange);
+    fieldGrad.addColorStop(0, p.color + '08');
+    fieldGrad.addColorStop(1, 'transparent');
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, gravRange, 0, Math.PI * 2);
+    ctx.fillStyle = fieldGrad;
+    ctx.fill();
+
+    // Shield
+    if (p.powerup === 'shield') {
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, p.r + 6, 0, Math.PI * 2);
+      ctx.strokeStyle = '#0af5';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([5, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Planet body
+    const bodyGrad = ctx.createRadialGradient(
+      s.x - p.r * 0.3, s.y - p.r * 0.3, p.r * 0.1,
+      s.x, s.y, p.r
+    );
+    bodyGrad.addColorStop(0, lightenColor(p.color, 60));
+    bodyGrad.addColorStop(0.6, p.color);
+    bodyGrad.addColorStop(1, darkenColor(p.color, 40));
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+
+    // Outer glow
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, p.r + 2, 0, Math.PI * 2);
+    ctx.strokeStyle = p.color + (p.boosting ? 'cc' : '66');
+    ctx.lineWidth = p.boosting ? 4 : 2;
+    ctx.stroke();
+
+    // Boost trail
+    if (p.boosting) {
+      emitParticles(s.x, s.y, p.color, 2, 3, 20);
+    }
+
+    // Name
+    ctx.font = `bold ${isMe ? 13 : 11}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = isMe ? '#fff' : '#aaa';
+    ctx.fillText(p.name, s.x, s.y - p.r - 8);
+
+    // Score
+    ctx.font = '10px system-ui';
+    ctx.fillStyle = '#667';
+    ctx.fillText(p.score, s.x, s.y - p.r - 8 + 14);
+
+    // Direction indicator for self
+    if (isMe && (inputX || inputY)) {
+      const arrowDist = p.r + 18;
+      const ax = s.x + inputX * arrowDist;
+      const ay = s.y + inputY * arrowDist;
+      ctx.beginPath();
+      ctx.arc(ax, ay, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#0ff';
+      ctx.fill();
+    }
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      const s = toScreen(p.x, p.y);
+      const alpha = p.life / p.maxLife;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, p.r * alpha, 0, Math.PI * 2);
+      ctx.fillStyle = p.color + Math.round(alpha * 255).toString(16).padStart(2, '0');
+      ctx.fill();
+    }
+  }
+
+  function drawMinimap(arena, players) {
+    const size = 140;
+    const padding = 16;
+    const mx = canvas.width - size - padding;
+    const my = canvas.height - size - padding;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(mx, my, size, size, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    const sx = size / arena.w;
+    const sy = size / arena.h;
+
+    for (const p of players) {
+      if (!p.alive) continue;
+      ctx.beginPath();
+      ctx.arc(mx + p.x * sx, my + p.y * sy, p.id === myId ? 4 : 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+    }
+
+    // Camera viewport
+    const vx = mx + (camX - canvas.width / 2) * sx;
+    const vy = my + (camY - canvas.height / 2) * sy;
+    const vw = canvas.width * sx;
+    const vh = canvas.height * sy;
+    ctx.strokeStyle = 'rgba(0,240,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(vx, vy, vw, vh);
+  }
+
+  // ─── Color helpers ────────────────────────────────────────
+  function lightenColor(hex, amount) {
+    const r = Math.min(255, parseInt(hex.slice(1, 3), 16) + amount);
+    const g = Math.min(255, parseInt(hex.slice(3, 5), 16) + amount);
+    const b = Math.min(255, parseInt(hex.slice(5, 7), 16) + amount);
+    return `rgb(${r},${g},${b})`;
+  }
+  function darkenColor(hex, amount) {
+    const r = Math.max(0, parseInt(hex.slice(1, 3), 16) - amount);
+    const g = Math.max(0, parseInt(hex.slice(3, 5), 16) - amount);
+    const b = Math.max(0, parseInt(hex.slice(5, 7), 16) - amount);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // ─── HUD Update ───────────────────────────────────────────
+  function updateHUD() {
+    if (!gameState) return;
+    const me = gameState.players.find(p => p.id === myId);
+    if (!me) return;
+
+    // Score
+    hudScore.textContent = me.score;
+
+    // Boost indicator
+    const now = Date.now();
+    const boostReady = now - lastBoostTime >= BOOST_CD;
+    boostDot.className = 'boost-indicator' + (boostReady ? '' : ' cooldown');
+
+    // Powerup
+    if (me.powerup) {
+      powerupPill.style.display = '';
+      const labels = { speed: '⚡ Speed', shield: '🛡 Shield', gravity_amp: '🌀 Gravity', mass: '💎 Mass' };
+      powerupBadge.textContent = labels[me.powerup] || me.powerup;
+      const colors = { speed: '#0f0', shield: '#0af', gravity_amp: '#f0a', mass: '#ff0' };
+      powerupBadge.style.background = (colors[me.powerup] || '#fff') + '33';
+      powerupBadge.style.color = colors[me.powerup] || '#fff';
+    } else {
+      powerupPill.style.display = 'none';
+    }
+
+    // Death overlay
+    if (!me.alive) {
+      deathOverlay.classList.add('active');
+      const remaining = 3; // simplified
+      respawnTimer.textContent = 'Respawning...';
+    } else {
+      deathOverlay.classList.remove('active');
+    }
+
+    // Leaderboard
+    const sorted = [...gameState.players].sort((a, b) => b.score - a.score);
+    let lbHTML = '<h3>🏆 Leaderboard</h3>';
+    sorted.slice(0, 6).forEach((p, i) => {
+      const youClass = p.id === myId ? ' you' : '';
+      lbHTML += `<div class="entry${youClass}">
+        <div class="dot" style="background:${p.color}"></div>
+        <span class="name">${p.name}</span>
+        <span class="score">${p.score}</span>
+      </div>`;
+    });
+    leaderboardEl.innerHTML = lbHTML;
+  }
+
+  // ─── Game Loop ────────────────────────────────────────────
+  function render(time) {
+    requestAnimationFrame(render);
+    if (!gameState) return;
+
+    const me = gameState.players.find(p => p.id === myId);
+    if (me && me.alive) {
+      camX += (me.x - camX) * 0.12;
+      camY += (me.y - camY) * 0.12;
+      inputX = 0;
+      inputY = 0;
+      const kb = getKeyboardInput();
+      if (kb) { inputX = kb.dx; inputY = kb.dy; }
+    }
+
+    sendInput();
+    updateParticles();
+
+    // Clear
+    ctx.fillStyle = '#050510';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw
+    drawStars(time);
+    drawArena(gameState.arena);
+    drawBlackHoles(gameState.blackHoles, time);
+    drawAsteroids(gameState.asteroids);
+    drawPowerups(gameState.powerups, time);
+    drawParticles();
+    for (const p of gameState.players) {
+      if (p.alive) drawPlayer(p, time);
+    }
+    drawMinimap(gameState.arena, gameState.players);
+    updateHUD();
+  }
+
+  // ─── Connect ──────────────────────────────────────────────
+  playBtn.addEventListener('click', () => {
+    playBtn.textContent = 'Connecting...';
+    playBtn.disabled = true;
+    connect();
+  });
+  nameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') playBtn.click();
+  });
+
+  requestAnimationFrame(render);
+})();
+</script>
+</body>
+</html>
