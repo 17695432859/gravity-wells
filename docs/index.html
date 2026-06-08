@@ -754,8 +754,8 @@
       ctx.beginPath(); ctx.arc(s.x,s.y,p.r+6,0,Math.PI*2);
       ctx.strokeStyle = '#0af5'; ctx.lineWidth = 3; ctx.setLineDash([5,5]); ctx.stroke(); ctx.setLineDash([]);
     }
-    const bodyGrad = ctx.createRadialGradient(s.x-p.r*0.3,s.y-p.r*0.3,p.r*0.1,s.x,s.y,p.r);
-    bodyGrad.addColorStop(0,lightenColor(p.color,60)); bodyGrad.addColorStop(0.6,p.color); bodyGrad.addColorStop(1,darkenColor(p.color,40));
+    const bodyGrad = ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,p.r);
+    bodyGrad.addColorStop(0,lightenColor(p.color,80)); bodyGrad.addColorStop(0.5,p.color); bodyGrad.addColorStop(1,darkenColor(p.color,50));
     ctx.beginPath(); ctx.arc(s.x,s.y,p.r,0,Math.PI*2); ctx.fillStyle = bodyGrad; ctx.fill();
     ctx.beginPath(); ctx.arc(s.x,s.y,p.r+2,0,Math.PI*2);
     ctx.strokeStyle = p.color+(p.boosting?'cc':'66'); ctx.lineWidth = p.boosting?4:2; ctx.stroke();
@@ -831,7 +831,7 @@
   }
 
   // ─── Main Loop ────────────────────────────────────────────
-  let lastTime = 0;
+  let lastTime = performance.now();
   function render(time) {
     requestAnimationFrame(render);
     const dt = Math.min((time - lastTime) / 1000, 0.1);
@@ -873,6 +873,10 @@
     mode = 'solo';
     modeTag.textContent = '🎮 Solo Mode — vs AI Bots';
     initSolo();
+    // Snap camera to player immediately
+    const me = soloPlayers.find(p => p.id === myId);
+    if (me) { camX = me.x; camY = me.y; }
+    lastTime = performance.now();
     enterGame();
   });
 
